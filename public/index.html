@@ -1,0 +1,701 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>LiveBoard — Real-time Whiteboard</title>
+<link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Syne:wght@400;700;800&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg: #0d0d0f;
+    --surface: #16161a;
+    --border: #2a2a32;
+    --accent: #7c3aed;
+    --accent2: #06d6a0;
+    --danger: #ef4444;
+    --text: #e8e8f0;
+    --muted: #6b6b80;
+    --panel: #1c1c23;
+  }
+
+  body {
+    font-family: 'Syne', sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    height: 100dvh;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  /* ─── LOBBY ─── */
+  #lobby {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    height: 100dvh;
+    gap: 0;
+    background: var(--bg);
+    position: relative;
+    overflow: hidden;
+  }
+
+  #lobby::before {
+    content: '';
+    position: absolute;
+    width: 600px; height: 600px;
+    background: radial-gradient(circle, rgba(124,58,237,0.15) 0%, transparent 70%);
+    top: -100px; left: 50%; transform: translateX(-50%);
+    pointer-events: none;
+  }
+
+  .lobby-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 20px;
+    padding: 48px 40px;
+    width: min(420px, 92vw);
+    position: relative;
+    z-index: 1;
+  }
+
+  .logo {
+    font-size: 2rem;
+    font-weight: 800;
+    letter-spacing: -1px;
+    margin-bottom: 6px;
+  }
+
+  .logo span { color: var(--accent2); }
+
+  .tagline {
+    font-family: 'Space Mono', monospace;
+    font-size: 0.72rem;
+    color: var(--muted);
+    margin-bottom: 40px;
+    letter-spacing: 0.05em;
+  }
+
+  .section-label {
+    font-size: 0.7rem;
+    font-weight: 700;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-bottom: 10px;
+  }
+
+  .divider {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin: 24px 0;
+    color: var(--muted);
+    font-size: 0.75rem;
+    font-family: 'Space Mono', monospace;
+  }
+  .divider::before, .divider::after {
+    content: '';
+    flex: 1;
+    height: 1px;
+    background: var(--border);
+  }
+
+  input[type="text"] {
+    width: 100%;
+    background: var(--bg);
+    border: 1.5px solid var(--border);
+    border-radius: 10px;
+    padding: 12px 16px;
+    font-size: 1rem;
+    font-family: 'Space Mono', monospace;
+    color: var(--text);
+    letter-spacing: 0.1em;
+    transition: border-color 0.2s;
+    outline: none;
+    text-transform: uppercase;
+  }
+  input[type="text"]:focus { border-color: var(--accent); }
+  input[type="text"]::placeholder { color: var(--muted); text-transform: none; letter-spacing: 0; }
+
+  .btn {
+    width: 100%;
+    padding: 13px;
+    border: none;
+    border-radius: 10px;
+    font-size: 0.95rem;
+    font-family: 'Syne', sans-serif;
+    font-weight: 700;
+    cursor: pointer;
+    transition: all 0.18s;
+    margin-top: 10px;
+    letter-spacing: 0.02em;
+  }
+
+  .btn-primary {
+    background: var(--accent);
+    color: #fff;
+  }
+  .btn-primary:hover { background: #6d28d9; transform: translateY(-1px); }
+
+  .btn-secondary {
+    background: transparent;
+    color: var(--text);
+    border: 1.5px solid var(--border);
+  }
+  .btn-secondary:hover { border-color: var(--accent2); color: var(--accent2); }
+
+  /* ─── APP SHELL ─── */
+  #app { display: none; flex-direction: column; height: 100dvh; }
+
+  /* ─── TOPBAR ─── */
+  .topbar {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 16px;
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    flex-shrink: 0;
+    flex-wrap: wrap;
+  }
+
+  .room-badge {
+    font-family: 'Space Mono', monospace;
+    font-size: 0.8rem;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 5px 12px;
+    color: var(--accent2);
+    letter-spacing: 0.1em;
+    cursor: pointer;
+    title: "Click to copy";
+  }
+  .room-badge:hover { border-color: var(--accent2); }
+
+  .user-pill {
+    font-family: 'Space Mono', monospace;
+    font-size: 0.72rem;
+    color: var(--muted);
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .user-dot {
+    width: 7px; height: 7px;
+    border-radius: 50%;
+    background: var(--accent2);
+    animation: pulse 2s infinite;
+  }
+  @keyframes pulse {
+    0%,100% { opacity:1; } 50% { opacity:0.4; }
+  }
+
+  .topbar-spacer { flex: 1; }
+
+  .topbar-btn {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    color: var(--text);
+    border-radius: 8px;
+    padding: 6px 12px;
+    font-size: 0.78rem;
+    font-family: 'Syne', sans-serif;
+    font-weight: 700;
+    cursor: pointer;
+    transition: all 0.15s;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .topbar-btn:hover { border-color: var(--accent); color: var(--accent); }
+  .topbar-btn.danger:hover { border-color: var(--danger); color: var(--danger); }
+
+  /* ─── TOOLBAR ─── */
+  .toolbar {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 14px;
+    background: var(--panel);
+    border-bottom: 1px solid var(--border);
+    flex-shrink: 0;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+  .toolbar::-webkit-scrollbar { display: none; }
+
+  .tool-group {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 0 8px;
+    border-right: 1px solid var(--border);
+  }
+  .tool-group:last-child { border-right: none; }
+
+  .tool-btn {
+    width: 36px; height: 36px;
+    border: none;
+    background: transparent;
+    border-radius: 8px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.1rem;
+    color: var(--muted);
+    transition: all 0.15s;
+    position: relative;
+  }
+  .tool-btn:hover { background: var(--border); color: var(--text); }
+  .tool-btn.active { background: var(--accent); color: #fff; }
+
+  .color-swatch {
+    width: 26px; height: 26px;
+    border-radius: 50%;
+    border: 2px solid transparent;
+    cursor: pointer;
+    transition: transform 0.15s, border-color 0.15s;
+    flex-shrink: 0;
+  }
+  .color-swatch:hover { transform: scale(1.2); }
+  .color-swatch.active { border-color: var(--text); transform: scale(1.15); }
+
+  #colorPicker {
+    width: 30px; height: 30px;
+    border: none;
+    border-radius: 50%;
+    cursor: pointer;
+    background: none;
+    padding: 0;
+  }
+
+  .size-slider {
+    -webkit-appearance: none;
+    width: 80px;
+    height: 4px;
+    background: var(--border);
+    border-radius: 4px;
+    outline: none;
+  }
+  .size-slider::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    width: 14px; height: 14px;
+    border-radius: 50%;
+    background: var(--accent);
+    cursor: pointer;
+  }
+
+  .tool-label {
+    font-family: 'Space Mono', monospace;
+    font-size: 0.65rem;
+    color: var(--muted);
+    white-space: nowrap;
+  }
+
+  /* ─── CANVAS AREA ─── */
+  .canvas-wrap {
+    flex: 1;
+    position: relative;
+    overflow: hidden;
+    background: #fff;
+    cursor: crosshair;
+  }
+
+  #mainCanvas {
+    position: absolute;
+    top: 0; left: 0;
+    width: 100%; height: 100%;
+    touch-action: none;
+  }
+
+  #cursorCanvas {
+    position: absolute;
+    top: 0; left: 0;
+    width: 100%; height: 100%;
+    pointer-events: none;
+    touch-action: none;
+  }
+
+  /* ─── STATUS BAR ─── */
+  .statusbar {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    padding: 5px 14px;
+    background: var(--surface);
+    border-top: 1px solid var(--border);
+    font-family: 'Space Mono', monospace;
+    font-size: 0.65rem;
+    color: var(--muted);
+    flex-shrink: 0;
+  }
+
+  #connectionStatus { display: flex; align-items: center; gap: 5px; }
+  .status-dot { width: 6px; height: 6px; border-radius: 50%; background: #ef4444; }
+  .status-dot.connected { background: var(--accent2); }
+
+  /* ─── TOAST ─── */
+  #toast {
+    position: fixed;
+    bottom: 60px;
+    left: 50%;
+    transform: translateX(-50%) translateY(20px);
+    background: #1e1e2e;
+    color: var(--text);
+    padding: 10px 20px;
+    border-radius: 10px;
+    border: 1px solid var(--border);
+    font-size: 0.82rem;
+    font-family: 'Space Mono', monospace;
+    opacity: 0;
+    transition: all 0.3s;
+    pointer-events: none;
+    white-space: nowrap;
+    z-index: 999;
+  }
+  #toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+  /* ─── ERASER CURSOR ─── */
+  .eraser-cursor { cursor: cell !important; }
+
+  @media (max-width: 500px) {
+    .lobby-card { padding: 36px 24px; }
+    .logo { font-size: 1.6rem; }
+  }
+</style>
+</head>
+<body>
+
+<!-- ══════════ LOBBY ══════════ -->
+<div id="lobby">
+  <div class="lobby-card">
+    <div class="logo">Live<span>Board</span></div>
+    <div class="tagline">// real-time collaborative whiteboard</div>
+
+    <div class="section-label">Create a new room</div>
+    <button class="btn btn-primary" onclick="createRoom()">✦ Generate Room Code</button>
+
+    <div class="divider">or join existing</div>
+
+    <div class="section-label">Room code</div>
+    <input type="text" id="roomInput" placeholder="Enter code e.g. XKCD42" maxlength="10">
+    <button class="btn btn-secondary" onclick="joinRoom()">→ Join Room</button>
+  </div>
+</div>
+
+<!-- ══════════ APP ══════════ -->
+<div id="app">
+  <!-- Top Bar -->
+  <div class="topbar">
+    <div class="logo" style="font-size:1.1rem; letter-spacing:-0.5px; flex-shrink:0;">Live<span style="color:var(--accent2)">Board</span></div>
+    <div class="room-badge" id="roomBadge" onclick="copyCode()" title="Click to copy">─</div>
+    <div class="user-pill">
+      <div class="user-dot"></div>
+      <span id="userCount">1 user</span>
+    </div>
+    <div class="topbar-spacer"></div>
+    <button class="topbar-btn danger" onclick="clearBoard()">🗑 Clear</button>
+    <button class="topbar-btn" onclick="leaveRoom()">⬡ Leave</button>
+  </div>
+
+  <!-- Toolbar -->
+  <div class="toolbar">
+    <div class="tool-group">
+      <button class="tool-btn active" id="toolPen" onclick="setTool('pen')" title="Pen">✏️</button>
+      <button class="tool-btn" id="toolEraser" onclick="setTool('eraser')" title="Eraser">🧹</button>
+    </div>
+
+    <div class="tool-group">
+      <span class="color-swatch active" style="background:#1a1a1a" onclick="setColor('#1a1a1a', this)"></span>
+      <span class="color-swatch" style="background:#ef4444" onclick="setColor('#ef4444', this)"></span>
+      <span class="color-swatch" style="background:#f59e0b" onclick="setColor('#f59e0b', this)"></span>
+      <span class="color-swatch" style="background:#10b981" onclick="setColor('#10b981', this)"></span>
+      <span class="color-swatch" style="background:#3b82f6" onclick="setColor('#3b82f6', this)"></span>
+      <span class="color-swatch" style="background:#8b5cf6" onclick="setColor('#8b5cf6', this)"></span>
+      <span class="color-swatch" style="background:#ec4899" onclick="setColor('#ec4899', this)"></span>
+      <input type="color" id="colorPicker" value="#1a1a1a" oninput="setColor(this.value, null)" title="Custom color">
+    </div>
+
+    <div class="tool-group" style="gap:10px;">
+      <span class="tool-label">Size</span>
+      <input type="range" class="size-slider" id="sizeSlider" min="1" max="40" value="4" oninput="setBrushSize(this.value)">
+      <span class="tool-label" id="sizeLabel">4px</span>
+    </div>
+  </div>
+
+  <!-- Canvas -->
+  <div class="canvas-wrap" id="canvasWrap">
+    <canvas id="mainCanvas"></canvas>
+    <canvas id="cursorCanvas"></canvas>
+  </div>
+
+  <!-- Status bar -->
+  <div class="statusbar">
+    <div id="connectionStatus">
+      <div class="status-dot" id="statusDot"></div>
+      <span id="statusText">Connecting…</span>
+    </div>
+    <span id="coordDisplay">x: 0, y: 0</span>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<script>
+// ════════════════════════════
+//   STATE
+// ════════════════════════════
+let ws = null;
+let currentRoom = '';
+let tool = 'pen';
+let color = '#1a1a1a';
+let brushSize = 4;
+let isDrawing = false;
+let lastX = 0, lastY = 0;
+let remoteCursors = {};
+
+const mainCanvas = document.getElementById('mainCanvas');
+const curCanvas = document.getElementById('cursorCanvas');
+const ctx = mainCanvas.getContext('2d');
+const curCtx = curCanvas.getContext('2d');
+
+// ════════════════════════════
+//   ROOM LOGIC
+// ════════════════════════════
+function generateCode() {
+  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+  return Array.from({length: 6}, () => chars[Math.floor(Math.random() * chars.length)]).join('');
+}
+
+function createRoom() {
+  const code = generateCode();
+  document.getElementById('roomInput').value = code;
+  joinRoom();
+}
+
+function joinRoom() {
+  const code = document.getElementById('roomInput').value.trim().toUpperCase();
+  if (!code) { toast('Enter a room code'); return; }
+  currentRoom = code;
+  showApp();
+  connectWS(code);
+}
+
+function leaveRoom() {
+  if (ws) ws.close();
+  document.getElementById('app').style.display = 'none';
+  document.getElementById('lobby').style.display = 'flex';
+  document.getElementById('roomInput').value = '';
+}
+
+function copyCode() {
+  navigator.clipboard.writeText(currentRoom).then(() => toast('Room code copied! 📋'));
+}
+
+// ════════════════════════════
+//   WEBSOCKET
+// ════════════════════════════
+function connectWS(room) {
+  const proto = location.protocol === 'https:' ? 'wss' : 'ws';
+  ws = new WebSocket(`${proto}://${location.host}`);
+
+  ws.onopen = () => {
+    setStatus(true);
+    ws.send(JSON.stringify({ type: 'join', room }));
+  };
+
+  ws.onclose = () => {
+    setStatus(false);
+    setTimeout(() => { if (currentRoom) connectWS(currentRoom); }, 2000);
+  };
+
+  ws.onerror = () => setStatus(false);
+
+  ws.onmessage = (e) => {
+    const msg = JSON.parse(e.data);
+    if (msg.type === 'history') {
+      ctx.clearRect(0, 0, mainCanvas.width, mainCanvas.height);
+      msg.strokes.forEach(drawRemoteStroke);
+    } else if (msg.type === 'draw') {
+      drawRemoteStroke(msg);
+    } else if (msg.type === 'clear') {
+      ctx.clearRect(0, 0, mainCanvas.width, mainCanvas.height);
+    } else if (msg.type === 'users') {
+      document.getElementById('userCount').textContent = `${msg.count} user${msg.count !== 1 ? 's' : ''}`;
+    } else if (msg.type === 'cursor') {
+      remoteCursors[msg.id] = { x: msg.x, y: msg.y, color: msg.color, ts: Date.now() };
+    }
+  };
+}
+
+function setStatus(connected) {
+  document.getElementById('statusDot').className = 'status-dot' + (connected ? ' connected' : '');
+  document.getElementById('statusText').textContent = connected ? `Connected · Room ${currentRoom}` : 'Reconnecting…';
+}
+
+function send(obj) {
+  if (ws && ws.readyState === 1) ws.send(JSON.stringify(obj));
+}
+
+// ════════════════════════════
+//   CANVAS SETUP
+// ════════════════════════════
+function resizeCanvases() {
+  const wrap = document.getElementById('canvasWrap');
+  const w = wrap.clientWidth, h = wrap.clientHeight;
+  [mainCanvas, curCanvas].forEach(c => { c.width = w; c.height = h; });
+}
+
+function showApp() {
+  document.getElementById('lobby').style.display = 'none';
+  const app = document.getElementById('app');
+  app.style.display = 'flex';
+  document.getElementById('roomBadge').textContent = `⌗ ${currentRoom}`;
+  requestAnimationFrame(() => { resizeCanvases(); startCursorLoop(); });
+}
+
+window.addEventListener('resize', resizeCanvases);
+
+// ════════════════════════════
+//   DRAWING
+// ════════════════════════════
+function getPos(e) {
+  const rect = mainCanvas.getBoundingClientRect();
+  const src = e.touches ? e.touches[0] : e;
+  return {
+    x: (src.clientX - rect.left) * (mainCanvas.width / rect.width),
+    y: (src.clientY - rect.top) * (mainCanvas.height / rect.height)
+  };
+}
+
+function pointerDown(e) {
+  e.preventDefault();
+  const { x, y } = getPos(e);
+  isDrawing = true;
+  lastX = x; lastY = y;
+  ctx.beginPath();
+  ctx.moveTo(x, y);
+}
+
+function pointerMove(e) {
+  e.preventDefault();
+  const { x, y } = getPos(e);
+  document.getElementById('coordDisplay').textContent = `x: ${Math.round(x)}, y: ${Math.round(y)}`;
+
+  // Send cursor
+  send({ type: 'cursor', x: x / mainCanvas.width, y: y / mainCanvas.height, color, id: currentRoom + '_me' });
+
+  if (!isDrawing) return;
+
+  const drawData = { type: 'draw', tool, color: tool === 'eraser' ? '#ffffff' : color, size: brushSize, x0: lastX, y0: lastY, x1: x, y1: y };
+  drawLine(ctx, drawData);
+  send(drawData);
+  lastX = x; lastY = y;
+}
+
+function pointerUp(e) { isDrawing = false; }
+
+function drawLine(context, d) {
+  context.save();
+  context.strokeStyle = d.color;
+  context.lineWidth = d.size;
+  context.lineCap = 'round';
+  context.lineJoin = 'round';
+  if (d.tool === 'eraser') {
+    context.globalCompositeOperation = 'source-over';
+    context.strokeStyle = '#ffffff';
+  } else {
+    context.globalCompositeOperation = 'source-over';
+  }
+  context.beginPath();
+  context.moveTo(d.x0, d.y0);
+  context.lineTo(d.x1, d.y1);
+  context.stroke();
+  context.restore();
+}
+
+function drawRemoteStroke(msg) { drawLine(ctx, msg); }
+
+// Events
+mainCanvas.addEventListener('mousedown', pointerDown);
+mainCanvas.addEventListener('mousemove', pointerMove);
+mainCanvas.addEventListener('mouseup', pointerUp);
+mainCanvas.addEventListener('touchstart', pointerDown, { passive: false });
+mainCanvas.addEventListener('touchmove', pointerMove, { passive: false });
+mainCanvas.addEventListener('touchend', pointerUp);
+
+// ════════════════════════════
+//   REMOTE CURSORS
+// ════════════════════════════
+function startCursorLoop() {
+  function loop() {
+    curCtx.clearRect(0, 0, curCanvas.width, curCanvas.height);
+    const now = Date.now();
+    for (const [id, cur] of Object.entries(remoteCursors)) {
+      if (now - cur.ts > 3000) { delete remoteCursors[id]; continue; }
+      const x = cur.x * curCanvas.width, y = cur.y * curCanvas.height;
+      curCtx.save();
+      curCtx.beginPath();
+      curCtx.arc(x, y, 6, 0, Math.PI * 2);
+      curCtx.fillStyle = cur.color || '#7c3aed';
+      curCtx.globalAlpha = 0.7;
+      curCtx.fill();
+      curCtx.restore();
+    }
+    requestAnimationFrame(loop);
+  }
+  loop();
+}
+
+// ════════════════════════════
+//   TOOL / COLOR / SIZE
+// ════════════════════════════
+function setTool(t) {
+  tool = t;
+  document.querySelectorAll('.tool-btn').forEach(b => b.classList.remove('active'));
+  document.getElementById('tool' + t.charAt(0).toUpperCase() + t.slice(1)).classList.add('active');
+  document.getElementById('canvasWrap').className = 'canvas-wrap' + (t === 'eraser' ? ' eraser-cursor' : '');
+}
+
+function setColor(c, el) {
+  color = c;
+  document.querySelectorAll('.color-swatch').forEach(s => s.classList.remove('active'));
+  if (el) el.classList.add('active');
+  document.getElementById('colorPicker').value = c;
+  if (tool === 'eraser') setTool('pen');
+}
+
+function setBrushSize(v) {
+  brushSize = parseInt(v);
+  document.getElementById('sizeLabel').textContent = v + 'px';
+}
+
+function clearBoard() {
+  if (!confirm('Clear the board for everyone?')) return;
+  ctx.clearRect(0, 0, mainCanvas.width, mainCanvas.height);
+  send({ type: 'clear' });
+}
+
+// ════════════════════════════
+//   TOAST
+// ════════════════════════════
+let toastTimer;
+function toast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => t.classList.remove('show'), 2500);
+}
+
+// Enter to join
+document.getElementById('roomInput').addEventListener('keydown', e => { if (e.key === 'Enter') joinRoom(); });
+</script>
+</body>
+</html>
